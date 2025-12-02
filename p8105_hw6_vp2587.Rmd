@@ -11,6 +11,7 @@ output: github_document
 ```{r problem1_setup, include = FALSE}
 library(tidyverse)
 library(modelr)
+library(purrr)
 ```
 
 ```{r homicide_cleaning, message = FALSE, warning = FALSE}
@@ -27,12 +28,51 @@ homicide_df = read_csv("homicide-data.csv") %>%
 ```
 
 **For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.**
-```{r}
+```{r baltimore_glm}
+baltimore_glm =  
+  homicide_df %>% 
+  filter(city_state == "Baltimore, MD") %>%
+  glm(
+    solved ~ victim_age + victim_sex + victim_race,
+    data = ., family = binomial()
+  )
 
+baltimore_glm  %>% 
+  broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>%
+  filter(term == "victim_sexMale") %>%
+  select(term, estimate, conf.low, conf.high)
 ```
-
-
-Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
-
-Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
-
+**Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.**
+```{r city_glm, warning = FALSE}
+city_glm =
+  homicide_df %>% 
+  group_by(city_state) %>% 
+  nest() %>% 
+  mutate(
+    fit = map(data, ~ glm(solved ~ victim_age + victim_sex + victim_race,
+                          data = ., family = binomial())),
+    tidy_fit = map(.x = fit, ~broom::tidy(.x, conf.int = TRUE, exponentiate = TRUE) )
+  ) %>% 
+  select(city_state, tidy_fit) %>% 
+  unnest(tidy_fit) %>% 
+  filter(term == "victim_sexMale") %>%
+  select(city_state, estimate, conf.low, conf.high)
+city_glm
+```
+**Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.**
+```{r city_glm_plot}
+city_glm %>% 
+  ggplot(aes(x = reorder(city_state, estimate), y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 7)) +
+  labs(
+    title = "Adjusted odds ratio of solved homicides between male and female victims",
+    x = "City",
+    y = "Adjusted odds ratio (male vs female victims)"
+  )
+```
+The majority of odds ratios are less than one, suggesting that cases female homicide victims in these cities are less often resolved. Of these cities, the odds ratio is statistically significant, implying sufficient evidence of a true difference in case disposition across sexes. Three cities report an odds ratio above 1, but they are not statistically significant since the lower bound of the interval is below 1.
