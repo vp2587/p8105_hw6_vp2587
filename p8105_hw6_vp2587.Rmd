@@ -1,0 +1,6 @@
+---
+title: "P8105 HW 6"
+author: "Veerapetch Petchger"
+date: "2025-12-02"
+output: github_document
+---
