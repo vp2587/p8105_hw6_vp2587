@@ -76,3 +76,70 @@ city_glm %>%
   )
 ```
 The majority of odds ratios are less than one, suggesting that cases female homicide victims in these cities are less often resolved. Of these cities, the odds ratio is statistically significant, implying sufficient evidence of a true difference in case disposition across sexes. Three cities report an odds ratio above 1, but they are not statistically significant since the lower bound of the interval is below 1.
+
+# Problem 2
+**For this problem, we’ll use the Central Park weather data we’ve seen elsewhere. The code chunk below will import these data from the p8105.datasets package.**
+```{r problem2_setup, include = FALSE}
+library(p8105.datasets)
+data("weather_df")
+```
+**The bootstrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response with tmin and prcp as the predictors, and are interested in the distribution of two quantities estimated from these data:**
+
+- 𝑟̂ 2
+
+- 𝛽̂ 1𝛽̂ 2
+
+**Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for 𝑟̂ 2 and 𝛽̂ 1𝛽̂ 2.**
+
+**Note: broom::glance() is helpful for extracting 𝑟̂ 2 from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing 𝛽̂ 1𝛽̂ 2.**
+```{r weather_boot}
+set.seed(123)
+weather_boot = 
+  weather_df %>% 
+  drop_na(tmax, tmin, prcp) %>%
+  bootstrap(n = 5000, id = "strap_id") %>% 
+  mutate(
+    fit = map(strap, ~lm(tmax ~ tmin + prcp, data = .x)),
+    glance = map(fit, broom::glance),
+    tidy = map(fit, broom::tidy)
+  ) %>% 
+  mutate(
+    r2_weather = map_dbl(glance, "r.squared"),
+    beta_ratio = map_dbl(tidy, ~ {
+      b1 = .x %>% 
+        filter(term == "tmin") %>% pull(estimate)
+      b2 = .x %>% 
+        filter(term == "prcp") %>% pull(estimate)
+      b1 / b2
+    })
+  ) %>% 
+  select(strap_id, r2_weather, beta_ratio)
+
+weather_long =
+  weather_boot %>% 
+  pivot_longer(
+    cols = c("r2_weather", "beta_ratio"),
+    names_to = "parameter",
+    values_to = "estimate"
+  )
+
+weather_long %>% 
+  ggplot(aes(x = estimate)) + 
+  geom_histogram(bins = 50) +
+  facet_wrap(. ~ parameter, scales = "free") +
+  labs(
+    title = "Bootstrap distributions for r^2 and β1/β2",
+    x = "Bootstrap estimate",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+weather_long %>% 
+  group_by(parameter) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.275),
+    ci_upper = quantile(estimate, 0.975)
+  )
+```
