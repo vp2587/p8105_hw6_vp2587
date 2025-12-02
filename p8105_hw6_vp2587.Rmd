@@ -135,7 +135,7 @@ weather_long %>%
   theme_minimal()
 ```
 
-```{r}
+```{r weather_ci}
 weather_long %>% 
   group_by(parameter) %>% 
   summarize(
@@ -143,3 +143,71 @@ weather_long %>%
     ci_upper = quantile(estimate, 0.975)
   )
 ```
+
+# Problem 3
+**Load and clean the data for regression analysis (i.e. use appropriate variable names, convert numeric to factor where appropriate, check for the presence of missing data, etc.).**
+```{r birthweight_clean}
+birthweight_df = 
+  read_csv("birthweight.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    babysex = factor(babysex,
+                     levels = c(1,2),
+                     labels = c("male", "female")),
+    frace = factor(frace,
+                   levels = c(1, 2, 3, 4, 8, 9),
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown" )),
+    malform = factor(malform,
+                     levels = c(0,1),
+                     labels = c("absent", "present")),
+    mrace = factor(mrace,
+                   levels = c(1, 2, 3, 4, 8, 9),
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown" ))
+  )
+```
+
+**Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+```{r proposed_model}
+birthweight_mod = 
+  birthweight_df %>% 
+  lm(bwt ~ babysex + gaweeks + malform + mheight + momage + mrace + parity + pnumlbw + pnumsga + smoken, data = .)
+birthweight_mod %>% 
+  summary()
+```
+
+```{r proposed_model_plot}
+birthweight_df %>% 
+  add_predictions(birthweight_mod) %>% 
+  add_residuals(birthweight_mod) %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Fitted values vs Residuals of Proposed Birthweight Model",
+    x = "Fitted values",
+    y = "Residuals"
+  ) +
+  theme_minimal()
+```
+I created a multiple linear regression model with respect to birthweight (`bwt`). The model investigates the relationships between several variables that I felt are influential to determining `bwt`. These variables are the baby's sex (`babysex`), gestational age in weeks (`gaweeks`), the presence of malformations (`malform`), the mother's race (`mrace`), number of prior live births (`parity`), number of prior low birth weight babies (`pnumlbw`), number of prior small for gestational age babies (`pnumsga`), and the average number of cigarettes smoked per day (`smoken`). Measurements related to the babies' phenotypes such as their head circumference (`bhead`) and length (`blength`) at birth were excluded as they are competing outcomes with `bwt`.
+
+**Compare your model to two others:**
+
+- One using length at birth and gestational age as predictors (main effects only)
+```{r}
+bwt_model1 = 
+  birthweight_df %>% 
+  lm(bwt ~ blength + gaweeks, data = .)
+```
+
+- One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+```{r}
+bwt_model2 = 
+  birthweight_df %>% 
+  lm(bwt ~ bhead * blength * babysex, data = .)
+```
+
+**Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
+
+**Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.**
+
